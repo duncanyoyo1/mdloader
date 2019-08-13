@@ -357,21 +357,21 @@ int write_user_row(uint32_t *data)
     uint16_t status = read_half_word(0x2 + 0x41002000);
     printf("dsu statusb: %08x\n", status);
     write_word(0x41004010, status);
-    uint32_t cfg = read_word(0x41004000);
+    uint32_t cfg = read_word(0x41004000); /* clear nvm interrupt status bits */
     printf("nvm config: %08x\n", cfg);
     cfg &= ~(0xf0);
     write_word(0x41004000, cfg);
 
-    write_word(0x41004014,0x804000);
-    write_half_word(0x41004004,0xa500);
+    write_word(0x41004014,0x804000); /* set user row address */
+    write_half_word(0x41004004,0xa500); /* erase page */
     slp(100);
-    write_half_word(0x41004004,0xa515);
+    write_half_word(0x41004004,0xa515); /* erase write buffer */
     slp(100);
     for(int i = 0; i < 4; i++) {
-        write_word(0x804000 + i * 4, data[i]);
+        write_word(0x804000 + i * 4, data[i]); /* write in the write buffer */
     }
-    write_word(0x41004014,0x804000);
-    write_half_word(0x41004004,0xa504);
+    write_word(0x41004014,0x804000); /* set user row address */
+    write_half_word(0x41004004,0xa504); /* program quad word (128bits) */
     slp(100);
     return 0;
 }
