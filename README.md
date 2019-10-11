@@ -81,7 +81,7 @@ Usage: mdloader [options] ...
   -f --first                     Use first found device port as programming port
   -l --list                      Print valid attached devices for programming
   -p --port port                 Specify programming port
-  -r                             Enable SmartEEPROM if firmware is compatible
+  -r                             Enable update user row to update SmartEEPROM if firmware supports it
   -U --upload file               Read firmware from device into <file>
   -a --addr address              Read firmware starting from <address>
   -s --size size                 Read firmware size of <size>
