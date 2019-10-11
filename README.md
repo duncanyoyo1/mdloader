@@ -1,14 +1,18 @@
 ### User instructions
 
-1. Follow the instructions here to download the executable for your operating system: https://github.com/Massdrop/mdloader/releases
+**Notice** 
+This branch has been changed to enable the SmartEEPROM feature availible on the ATSAMD51J18A and it is still experimental.
+This may cause issues. **You have been warned**.
 
-2. Plug in your keyboard.
+1. Follow the instructions below to build the mdloader executable for your operating system. 
 
-3. In your terminal, change to the directory where you downloaded the executable and applet-*.bin file(s).
+2. Once you have it built and running, plug in your keyboard.
 
-4. **Windows** - Run `mdloader_windows.exe --first --download FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware.  
-**Linux** - Run `mdloader_linux --first --download FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware. Depending on your user's permissions, you might have to add your user to the `dialout` group or use `sudo` on the command.  
-**Mac** - Run `mdloader_mac --first --download FILE_NAME --restart`.  If you downloaded with Mac Safari, run `mdloader_mac.dms --first --download FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware. 
+3. In your terminal, change to the directory where you compiled the executable and applet-*.bin file(s).
+
+4. **Windows** - Run `mdloader_windows.exe -f -D -r FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware.  
+**Linux** - Run `mdloader_linux -f -D -r FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware. Depending on your user's permissions, you might have to add your user to the `dialout` group or use `sudo` on the command.  
+**Mac** - Run `mdloader_mac -f -D -r FILE_NAME --restart`.  If you downloaded with Mac Safari, run `mdloader_mac.dms -f -D -r FILE_NAME --restart`. Replace "FILE_NAME" with the filename of your compiled firmware. 
   
 5. You should see the message:  
 ```
@@ -22,17 +26,25 @@ Scanning for device for 60 seconds
 ```
 Device port: /dev/cu.usbmodem234431 (SAMD51J18A)
 
-Opening port '/dev/cu.usbmodem234431'... Success!
+Opening port 'COM12'... Success!
 Found MCU: SAMD51J18A
-Bootloader version: v2.18Sep  4 2018 16:48:28
-Applet file: applet-flash-samd51j18a.bin
-Applet Version: 1
-Writing firmware... Complete!
-Booting device... Success!
-Closing port... Success!
+Bootloader version: v2.18Jun 22 2018 17:28:08
+user row: 0xfe9a9239 0xaeecff80 0xffffffff 0xffffffff
+SmartEEPROM not configured, proceed
+dsu statusb: 00000010
+nvm config: 00000004
 ```
 
 8. Afterwards, you should see the keyboard's LEDs light up again (if your configuration has LEDs enabled) and the keyboard should respond to typing. Your keyboard is now running the new firmware you specified.
+
+9. If SmartEEPROM is not enabled you may need to run the flash command again, until you see
+```
+Opening port 'COM12'... Success!
+Found MCU: SAMD51J18A
+Bootloader version: v2.18Jun 22 2018 17:28:08
+user row: 0xfe9a9239 0xaeecff92 0xffffffff 0xffffffff
+SmartEEPROM already configured
+```
 
 -----
 
@@ -69,6 +81,7 @@ Usage: mdloader [options] ...
   -f --first                     Use first found device port as programming port
   -l --list                      Print valid attached devices for programming
   -p --port port                 Specify programming port
+  -r                             Enable SmartEEPROM if firmware is compatible
   -U --upload file               Read firmware from device into <file>
   -a --addr address              Read firmware starting from <address>
   -s --size size                 Read firmware size of <size>
@@ -99,4 +112,4 @@ Test mode also allows viewing of binary data from a read instead of writing to a
 
 ## Troubleshooting
 
-**Linux**: User may need to be added to group dialout to access programming port  
+**Linux**: User may need to be added to group dialout to access programming port, Arch users may need to use sudo.  
