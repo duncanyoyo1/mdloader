@@ -352,6 +352,49 @@ int test_mcu(char silent)
     return 1;
 }
 
+int write_user_row(uint32_t *data)
+{
+    uint16_t status = read_half_word(0x2 + 0x41002000);
+    printf("dsu statusb: %08x\n", status);
+    write_word(0x41004010, status);
+    uint32_t cfg = read_word(0x41004000);
+    printf("nvm config: %08x\n", cfg);
+    cfg &= ~(0xf0);
+    write_word(0x41004000, cfg);
+
+    write_word(0x41004014,0x804000);
+    write_half_word(0x41004004,0xa500);
+    slp(100);
+    write_half_word(0x41004004,0xa515);
+    slp(100);
+    for(int i = 0; i < 4; i++) {
+        write_word(0x804000 + i * 4, data[i]);
+    }
+    write_word(0x41004014,0x804000);
+    write_half_word(0x41004004,0xa504);
+    slp(100);
+    return 0;
+}
+
+int read_user_row(void)
+{
+    uint32_t user_row[4];
+    printf("user row: ");
+    for (int i = 0; i < 4; i++) {
+        user_row[i] = read_word(0x804000 + i * 4);
+        printf("0x%08x ", user_row[i]);
+    }
+    printf("\n");
+    if ((user_row[1] & 0x7f) != 0x12) {
+        printf("SmartEEPROM not configured, proceed\n");
+        user_row[1] |= (0x12);
+        write_user_row(user_row);
+    } else {
+        printf("SmartEEPROM already configured\n");
+    }
+    return 0;
+}
+
 //Upper case any lower case characters in a string
 void strlower(char *str)
 {
@@ -490,6 +533,7 @@ struct option long_options[] = {
     { "addr",           required_argument,  0,  'a' },
     { "size",           required_argument,  0,  's' },
     { "test",           no_argument,        0,  't' },
+    { "user",           no_argument,        0,  'r' },
     { "cols",           required_argument,  0,  SW_COLS },
     { "colw",           required_argument,  0,  SW_COLW },
     { 0, 0, 0, 0 }
@@ -521,7 +565,7 @@ int main(int argc, char *argv[])
         int option_index = 0;
         int base;
 
-        c = getopt_long(argc, argv, "hvVlftp:D:U:a:s:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hvVlftrp:D:U:a:s:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -601,6 +645,10 @@ int main(int argc, char *argv[])
 
             case 't':
                 testmode = 1;
+                break;
+
+            case 'r':
+                command = CMD_READ_USER_ROW;
                 break;
 
             case SW_COLS:
@@ -725,6 +773,14 @@ int main(int argc, char *argv[])
 
     print_bootloader_version();
     if (verbose) printf("Device ID: %08X\n", mcu->cidr);
+
+    if (command == CMD_READ_USER_ROW)
+    {
+        read_user_row();
+        goto exitProgram;
+    }
+
+
 
     //Load applet
     FILE *fIn;
