@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2018  Massdrop Inc.
+ *  Copyright (C) 2018-2020 Massdrop Inc.
  *
  *  This file is part of Massdrop Loader.
  *
@@ -26,6 +26,7 @@ char first_device;
 int restart_after_program;
 int hex_cols;
 int hex_colw;
+int force_smarteeprom_config;
 
 //SAM-BA Settings
 mailbox_t initparams;
@@ -35,7 +36,32 @@ appinfo_t appinfo;      //Applet application information from end of applet bina
 mcu_t mcus[] = {
       //Name,       Chip ID     Chip ID,    Program Memory, Data Memory,    Program Addr,   Data Addr
       //            Address                 (FLASH_SIZE)    (HSRAM_SIZE)    (FLASH_ADDR)    (HSRAM_ADDR)
-    { "SAMD51J18A", 0x41002018, 0x60060006, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME54P19A", 0x41002018, 0x61840001, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME54P20A", 0x41002018, 0x61840000, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME54N19A", 0x41002018, 0x61840003, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME54N20A", 0x41002018, 0x61840002, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME53N20A", 0x41002018, 0x61830002, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME53N19A", 0x41002018, 0x61830003, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME53J18A", 0x41002018, 0x61830006, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME53J19A", 0x41002018, 0x61830005, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME53J20A", 0x41002018, 0x61830004, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51N19A", 0x41002018, 0x61810001, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51N20A", 0x41002018, 0x61810000, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51J18A", 0x41002018, 0x61810003, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51J19A", 0x41002018, 0x61810002, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51J20A", 0x41002018, 0x61810004, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51P20A", 0x41002018, 0x60060000, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51P19A", 0x41002018, 0x60060001, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51N19A", 0x41002018, 0x60060003, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51N20A", 0x41002018, 0x60060002, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51J18A", 0x41002018, 0x60060006, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51J19A", 0x41002018, 0x60060005, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51J20A", 0x41002018, 0x60060004, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51G18A", 0x41002018, 0x60060008, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAMD51G19A", 0x41002018, 0x60060007, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51G18A", 0x41002018, 0x61810306, 0x40000,        0x20000,        0x00000000,     0x20000000},
+{"SAME51G19A", 0x41002018, 0x61810305, 0x40000,        0x20000,        0x00000000,     0x20000000},
+
 };
 
 mcu_t *mcu; //Pointer to mcus entry if found
@@ -336,7 +362,7 @@ int test_mcu(char silent)
             continue;
         }
 
-        if (deviceid == mcu->cidr)
+        if ((deviceid & CIDR_DIE_REVISION_MASK) == mcu->cidr)
         {
             if (!silent && verbose) printf("Found supported device ID: %08X\n", deviceid);
             break;
@@ -352,47 +378,123 @@ int test_mcu(char silent)
     return 1;
 }
 
-int write_user_row(uint32_t *data)
+// SmartEEPROM NVMCTRL section
+int write_user_row(uint32_t* data)
 {
-    uint16_t status = read_half_word(0x2 + 0x41002000);
-    printf("dsu statusb: %08x\n", status);
-    write_word(0x41004010, status);
-    uint32_t cfg = read_word(0x41004000);
-    printf("nvm config: %08x\n", cfg);
-    cfg &= ~(0xf0);
-    write_word(0x41004000, cfg);
+    //Read the current state of NVMCTRL.CTRLA
+    NVMCTRL_CTRLA_Type ctrla;
+    ctrla.reg = read_half_word(NVMCTRL_CTRLA);
+    printf("NVMCTRL.CTRLA: 0x%04x\n\tAUTOWS: 0x%01x\n\tSUSPEN: 0x%01x\n\tWMODE: 0x%02x\n\tPRM: 0x%02x\n\tRWS: 0x%04x\n\tAHBNS0: 0x%01x\n\tAHBNS1: 0x%01x\n\tCACHEDIS0: 0x%01x\n\tCACHEDIS1: 0x%01x\n", ctrla.reg, ctrla.bit.AUTOWS, ctrla.bit.SUSPEN, ctrla.bit.WMODE, ctrla.bit.PRM, ctrla.bit.RWS, ctrla.bit.AHBNS0, ctrla.bit.AHBNS1, ctrla.bit.CACHEDIS0, ctrla.bit.CACHEDIS1);
 
-    write_word(0x41004014,0x804000);
-    write_half_word(0x41004004,0xa500);
-    slp(100);
-    write_half_word(0x41004004,0xa515);
-    slp(100);
-    for(int i = 0; i < 4; i++) {
-        write_word(0x804000 + i * 4, data[i]);
+    printf("Configuring SmartEEPROM... ");
+
+    //Set WMODE to Manual
+    ctrla.bit.WMODE = NVMCTRL_CTRLA_WMODE_MAN;
+    if (!write_half_word(NVMCTRL_CTRLA, ctrla.reg))
+    {
+        printf("Error setting NVMCTRL.CTRLA.WMODE to Manual.\n");
+        return 0;
     }
-    write_word(0x41004014,0x804000);
-    write_half_word(0x41004004,0xa504);
-    slp(100);
-    return 0;
+    slp(SLEEP_BETWEEN_WRITES);
+
+    // Set user row address
+    if (!write_word(NVMCTRL_ADDR, NVMCTRL_USER))
+    {
+        printf("Error setting NVMCTRL_ADDR to NVMCTRL_USER (1).\n");
+        return 0;
+    }
+
+    // Erase page
+    NVMCTRL_CTRLB_Type ctrlb;
+    ctrlb.reg = 0;
+    ctrlb.bit.CMD = NVMCTRL_CTRLB_CMD_EP;
+    ctrlb.bit.CMDEX = NVMCTRL_CTRLB_CMDEX_KEY;
+    if (!write_half_word(NVMCTRL_CTRLB, ctrlb.reg))
+    {
+        printf("Error setting NVMCTRL_CTRLB to 0x%04x (Erase page).\n", ctrlb.reg);
+        return 0;
+    }
+    slp(SLEEP_BETWEEN_WRITES);
+
+    // Page buffer clear
+    ctrlb.reg = 0;
+    ctrlb.bit.CMD = NVMCTRL_CTRLB_CMD_PBC;
+    ctrlb.bit.CMDEX = NVMCTRL_CTRLB_CMDEX_KEY;
+    if (!write_half_word(NVMCTRL_CTRLB, ctrlb.reg))
+    {
+        printf("Error setting NVMCTRL_CTRLB to 0x%04x (Page buffer clear).\n", ctrlb.reg);
+        return 0;
+    }
+    slp(SLEEP_BETWEEN_WRITES);
+
+    // Write in the write buffer
+    for (int i = 0; i < 4; i++)
+    {
+        if (!write_word(NVMCTRL_USER + i * 4, data[i]))
+        {
+            printf("Error: Unable to write NVMCTRL_USER page %i.\n", i);
+            return 0;
+        }
+        slp(SLEEP_BETWEEN_WRITES);
+    }
+
+    if (!write_word(NVMCTRL_ADDR, NVMCTRL_USER))
+    {
+        printf("Error setting NVMCTRL_ADDR to NVMCTRL_USER (2).\n");
+        return 0;
+    }
+    slp(SLEEP_BETWEEN_WRITES);
+
+    // Write quad word (128bits)
+    ctrlb.reg = 0;
+    ctrlb.bit.CMD = NVMCTRL_CTRLB_CMD_WQW;
+    ctrlb.bit.CMDEX = NVMCTRL_CTRLB_CMDEX_KEY;
+    if (!write_half_word(NVMCTRL_CTRLB, ctrlb.reg))
+    {
+        printf("Error setting NVMCTRL_CTRLB to 0x%04x (Write Quad Word).\n", ctrlb.reg);
+        return 0;
+    }
+
+    printf("Success!\n");
+    return 1;
 }
 
-int read_user_row(void)
+void configure_smarteeprom(void)
 {
     uint32_t user_row[4];
     printf("user row: ");
-    for (int i = 0; i < 4; i++) {
-        user_row[i] = read_word(0x804000 + i * 4);
+    for (int i = 0; i < 4; i++)
+    {
+        user_row[i] = read_word(NVMCTRL_USER + i * 4);
         printf("0x%08x ", user_row[i]);
     }
     printf("\n");
-    if ((user_row[1] & 0x7f) != 0x12) {
-        printf("SmartEEPROM not configured, proceed\n");
-        user_row[1] |= (0x12);
-        write_user_row(user_row);
-    } else {
-        printf("SmartEEPROM already configured\n");
+
+    NVMCTRL_USER_ROW_MAPPING1_Type* puser_row1 = (NVMCTRL_USER_ROW_MAPPING1_Type*)(&user_row[1]);
+
+    // Check current status and proceed accordingly.
+    if (puser_row1->bit.SBLK == 0 && puser_row1->bit.PSZ == 0)
+    {
+        printf("SmartEEPROM not configured, proceed.\n");
     }
-    return 0;
+    else
+    {
+        printf("SmartEEPROM already configured - SBLK: 0x%04x - PSZ: 0x%03x.\n", puser_row1->bit.SBLK, puser_row1->bit.PSZ);
+        if (force_smarteeprom_config)
+        {
+            printf("--forceeep enabled, proceed.\n");
+        }
+        else
+        {
+            printf("Use --forceeep to force to configure it anyway.\n");
+            return;
+        }
+    }
+
+    // Set SmartEEPROM Virtual Size.
+    puser_row1->bit.SBLK = 0x1; // 1 block
+    puser_row1->bit.PSZ = 0x1;  // 8 bytes
+    write_user_row(user_row);
 }
 
 //Upper case any lower case characters in a string
@@ -488,7 +590,7 @@ void display_version(void)
 //Display program copyright
 void display_copyright(void)
 {
-    printf(PROGRAM_NAME "  Copyright (C) 2018  Massdrop Inc.\n");
+    printf(PROGRAM_NAME "  Copyright (C) 2018-2020 Massdrop Inc.\n");
     printf("This program is Free Software and has ABSOLUTELY NO WARRANTY\n");
     printf("\n");
 }
@@ -508,6 +610,8 @@ void display_help(void)
     printf("  -s --size size                 Read firmware size of <size>\n");
     printf("  -D --download file             Write firmware from <file> into device\n");
     printf("  -t --test                      Test mode (download/upload writes disabled, upload outputs data to stdout, restart disabled)\n");
+    printf("     --smarteep                  Enable Smart EEPROM MCU feature\n");
+    printf("     --forceeep                  Force re-configuration of Smart EEPROM MCU feature. Requires --smarteep.\n");
     printf("     --cols count                Hex listing column count <count> [%i]\n", COLS);
     printf("     --colw width                Hex listing column width <width> [%i]\n", COLW);
     printf("     --restart                   Restart device after successful programming\n");
@@ -516,11 +620,13 @@ void display_help(void)
 
 #define SW_COLS     1000
 #define SW_COLW     1001
+#define SW_SMARTEEP 1002
 
 //Program command line options
 struct option long_options[] = {
     //Flags
     { "restart",        no_argument,        &restart_after_program, 1 },
+    { "forceeep",       no_argument,        &force_smarteeprom_config, 1 },
     //Other
     { "verbose",        no_argument,        0,  'v' },
     { "help",           no_argument,        0,  'h' },
@@ -533,7 +639,7 @@ struct option long_options[] = {
     { "addr",           required_argument,  0,  'a' },
     { "size",           required_argument,  0,  's' },
     { "test",           no_argument,        0,  't' },
-    { "user",           no_argument,        0,  'r' },
+    { "smarteep",       no_argument,        0,  SW_SMARTEEP },
     { "cols",           required_argument,  0,  SW_COLS },
     { "colw",           required_argument,  0,  SW_COLW },
     { 0, 0, 0, 0 }
@@ -547,6 +653,7 @@ int main(int argc, char *argv[])
     restart_after_program = 0;
     hex_cols = COLS;
     hex_colw = COLW;
+    force_smarteeprom_config = 0;
 
     display_version();
     display_copyright();
@@ -565,7 +672,7 @@ int main(int argc, char *argv[])
         int option_index = 0;
         int base;
 
-        c = getopt_long(argc, argv, "hvVlftrp:D:U:a:s:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hvVlftp:D:U:a:s:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -647,8 +754,8 @@ int main(int argc, char *argv[])
                 testmode = 1;
                 break;
 
-            case 'r':
-                command = CMD_READ_USER_ROW;
+            case SW_SMARTEEP:
+                command = CMD_CONFIG_SMARTEEPROM;
                 break;
 
             case SW_COLS:
@@ -774,20 +881,24 @@ int main(int argc, char *argv[])
     print_bootloader_version();
     if (verbose) printf("Device ID: %08X\n", mcu->cidr);
 
-    if (command == CMD_READ_USER_ROW)
+    if (command == CMD_CONFIG_SMARTEEPROM)
     {
-        read_user_row();
+        configure_smarteeprom();
+
+        if (restart_after_program)
+            jump_application();
+
         goto exitProgram;
     }
-
-
 
     //Load applet
     FILE *fIn;
     char appletfname[128] = "";
     strlower(mcu->name);
 
-    sprintf(appletfname, "applet-flash-%s.bin", mcu->name);
+    //sprintf(appletfname, "applet-flash-%s.bin", mcu->name);
+    sprintf(appletfname, "applet-mdflash.bin");  //make filename non-dependent upon mcu->name
+
     printf("Applet file: %s\n", appletfname);
 
     fIn = fopen(appletfname, "rb");
